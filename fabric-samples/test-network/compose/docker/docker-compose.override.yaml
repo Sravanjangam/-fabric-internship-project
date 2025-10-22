@@ -1,0 +1,18 @@
+version: "3.7"
+
+services:
+  asset-manager-api:
+    container_name: asset-manager-api
+    build:
+      context: ../../../asset-manager-api
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes: # <-- ADDED THIS SECTION
+      - ../../../test-network/organizations:/test-network/organizations:ro
+    networks:
+      - fabric_test
+
+networks:
+  fabric_test:
+    external: true

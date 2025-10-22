@@ -25,7 +25,7 @@ const (
 	certPath      = cryptoPath + "/users/User1@org1.example.com/msp/signcerts/User1@org1.example.com-cert.pem"
 	keyPath       = cryptoPath + "/users/User1@org1.example.com/msp/keystore/" // Will find the first key
 	tlsCertPath   = cryptoPath + "/peers/peer0.org1.example.com/tls/ca.crt"
-	peerEndpoint  = "localhost:7051"
+	peerEndpoint  = "peer0.org1.example.com:7051"
 	gatewayPeer   = "peer0.org1.example.com"
 	channelName   = "mychannel"
 	chaincodeName = "asset-manager"
@@ -56,6 +56,9 @@ func main() {
 	r.HandleFunc("/api/assets", apiHandler.CreateAssetHandler).Methods("POST")
 	r.HandleFunc("/api/assets/{id}", apiHandler.ReadAssetHandler).Methods("GET")
 	r.HandleFunc("/api/assets/history/{id}", apiHandler.GetAssetHistoryHandler).Methods("GET")
+	r.HandleFunc("/api/assets/{id}", apiHandler.UpdateAssetHandler).Methods("PUT")
+	r.HandleFunc("/api/assets/{id}", apiHandler.DeleteAssetHandler).Methods("DELETE")
+	r.HandleFunc("/api/assets", apiHandler.GetAllAssetsHandler).Methods("GET")
 	// Add more routes here for Update, History, etc.
 
 	log.Println("Server is listening on http://localhost:8080")
@@ -149,6 +152,93 @@ func (h *ApiHandler) GetAssetHistoryHandler(w http.ResponseWriter, r *http.Reque
 	log.Printf("<-- Transaction Evaluated: GetAssetHistory, ID: %s", assetID)
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Write(result)
+}
+
+// UpdateAssetHandler handles PUT /api/assets/{id}
+// It updates an existing asset with new data
+func (h *ApiHandler) UpdateAssetHandler(w http.ResponseWriter, r *http.Request) {
+	// Get the 'id' variable from the URL
+	vars := mux.Vars(r)
+	assetID := vars["id"]
+
+	// Define a temporary struct to capture the incoming JSON
+	var assetUpdate struct {
+		MSISDN      string `json:"MSISDN"`
+		MPIN        string `json:"MPIN"`
+		BALANCE     string `json:"BALANCE"`
+		STATUS      string `json:"STATUS"`
+		TRANSAMOUNT string `json:"TRANSAMOUNT"`
+		TRANSTYPE   string `json:"TRANSTYPE"`
+		REMARKS     string `json:"REMARKS"`
+	}
+
+	// Decode the JSON request body into our struct
+	if err := json.NewDecoder(r.Body).Decode(&assetUpdate); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Call the 'UpdateAsset' function in our smart contract
+	// Note: The smart contract must have an "UpdateAsset" function
+	log.Printf("--> Submitting Transaction: UpdateAsset, ID: %s", assetID)
+	_, err := h.Contract.SubmitTransaction("UpdateAsset",
+		assetID, // The ID from the URL
+		assetUpdate.MSISDN,
+		assetUpdate.MPIN,
+		assetUpdate.BALANCE,
+		assetUpdate.STATUS,
+		assetUpdate.TRANSAMOUNT,
+		assetUpdate.TRANSTYPE,
+		assetUpdate.REMARKS,
+	)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to submit transaction: %s", err), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("<-- Transaction Committed: UpdateAsset, ID: %s", assetID)
+	// Send a success response
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Asset " + assetID + " updated successfully"})
+}
+
+// DeleteAssetHandler handles DELETE /api/assets/{id}
+func (h *ApiHandler) DeleteAssetHandler(w http.ResponseWriter, r *http.Request) {
+	// Get the 'id' variable from the URL
+	vars := mux.Vars(r)
+	assetID := vars["id"]
+
+	// Call the 'DeleteAsset' function in our smart contract
+	// Note: Your smart contract must have a "DeleteAsset" function
+	log.Printf("--> Submitting Transaction: DeleteAsset, ID: %s", assetID)
+	_, err := h.Contract.SubmitTransaction("DeleteAsset", assetID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to submit transaction: %s", err), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("<-- Transaction Committed: DeleteAsset, ID: %s", assetID)
+	// Send a success response
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Asset " + assetID + " deleted successfully"})
+}
+
+// GetAllAssetsHandler handles GET /api/assets
+func (h *ApiHandler) GetAllAssetsHandler(w http.ResponseWriter, r *http.Request) {
+	// Call the 'GetAllAssets' function in our smart contract
+	// Note: Your smart contract must have a "GetAllAssets" function
+	log.Printf("--> Evaluating Transaction: GetAllAssets")
+	result, err := h.Contract.EvaluateTransaction("GetAllAssets")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to evaluate transaction: %s", err), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("<-- Transaction Evaluated: GetAllAssets")
+
+	// Send the result back as JSON
+	w.Header().Set("Content-Type", "application/json")
+	// The result from the chaincode is raw JSON (likely an array), so write it directly
 	w.Write(result)
 }
 
